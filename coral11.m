@@ -9,7 +9,7 @@
 %   dt=weeks
 %   hX is the height for category X, and hS=0
 %   rates are in area increase/decrease per week
-%   e.g. r2, restoration by humans, increases H by r2(D+S)/totalArea each week
+%   e.g. r2, restoration by humans, increases H by r2 each week
 %   so if the whole patch was dead/substrate, and refilled with baby corals
 %   in 1 year of work, r2=1/52 (need to check this dynamic)
 %   EXCEPT: b and r1 only occur 1x/year, on bleachweek and spawnweek
@@ -33,28 +33,22 @@ gslopeDegrees=params.gslopeDegrees; %growth sensitivity to excess temperature,de
 % bouldering, so this value will be smaller for branching. Note in paper
 % that this is getting around building an internal temperature vs ocean
 % temperature function.
-Tcritical=params.Tcritical; %max temperature before g decreases, degrees C
+Tcritical=params.Tcritical; %max temperature before growth decreases, degrees C
 Ik=params.Ik; %slope of growth-light curve at origin
 waterdepth=params.waterdepth;%depth of the water in m
 Kd=params.Kd;%light attenuation, per meter
-disease = params.disease;%disease rate, m^2 H->U per m^4 (H*U) per wk
+disease = params.disease;%disease rate, fraction of H->U per wk
 recovery = params.recovery;%recovery rate
-minheight=params.minheight;%coral height of new juveniles/D->S height
-mJ = params.mJ; % Juvenile linear mortality 96-99% mortality m0 in 4 months-1yr
-mH = params.mH;%mortality of H via predation, m^2 H->D per m^4 (H^2) per wk
-mU = params.mU;%mortality of U, need to check boulder/branch difference!
+minheight=params.minheight;%minimum coral height of H and U
+mJ = params.mJ; % Juvenile linear mortality, expect 96-99% mortality in 4 months-1yr
+mH = params.mH;%mortality of H via predation
+mU = params.mU;%mortality of U
 rD = abs(params.rD);%shrinking of D, m/wk, linear shrinking rate with shape factor
 ghD=rD*sind(atand(2/(phiH))); %shrinking of D, m/wk, height
 stormProb=params.stormProb; %probability of storm per year, roll for each year, assign week for each positive, timeseries
 stormDestroy=params.stormDestroy; %fraction of area of standing coral that is removed per storm
 gmaxJ1=params.gaJ;
 gmaxJ2=params.gaJ;
-
-%Adding this to check area allocations at each time point
-%fieldNames = fieldnames(areas); % Get the field names dynamically
-%numFields = length(fieldNames);
-%logMatrix = zeros(numTimesteps, numFields); % Preallocate for efficiency
-
 years = params.years;%simulation length
 dt=1; %week
 timesteps=years*52/dt; %total number of timesteps
@@ -81,6 +75,7 @@ heights.hU=areas.H;
 heights.hD=areas.H; 
 heights.hH=areas.H; 
 heights.hJ2=areas.H;
+
 %initialize areas
 areas.H(1)=params.H0;
 areas.U(1)=params.U0;
@@ -88,6 +83,7 @@ areas.D(1)=params.D0;
 areas.S(1)=params.S0;
 areas.J1(1)=params.J10;%on bottom
 areas.J2(1)=params.J20;%on dead
+
 %initialize heights, but set them to 0 if the associated area is 0
 heights.hH(1)=params.hH0*double(params.H0>0); 
 heights.hU(1)=params.hU0*double(params.U0>0); 
@@ -105,26 +101,17 @@ njuv1=areas.J1(1)./0.000003;%assume average juvenile size 3mm2 (range 1-5mm2)
 njuv2=areas.J2(1)./0.000003;
 
 %T, temperature, and I, light
-%%% this assumes northern hemisphere! 
 %%% Ttrend is degrees/week
 times=0:1/52:years;
 Isurf=params.Imean+params.Iamp*sin((times+1/52)*2*pi);
-%%% note: ideally, this would check whether Tmean and Tamp and Ttrend exist
-%%% in params, or if instead a Tsurf exists, and then do one of the
-%%% following in the try structure. Jay failed to make this work.
-%try
+%%% note: 2 options for setting temperatures
    %Tsurf=params.Tmean+params.Tamp*sin((times-6/52)*2*pi)+params.Ttrend*times;
-%catch ME
-%end
-%try
     Tsurf=params.Tsurf;
      if length(Tsurf)<timesteps
          disp('Tsurf extended at final value')
          hold1=Tsurf; 
          Tsurf(length(hold1):timesteps+1)=hold1(end);
      end
-%catch ME2
-%end
 
 
 firstHgone=false;
@@ -133,27 +120,19 @@ firstJgone=false;
 for ii=1:timesteps
     
     % XYflux is an area
-    HUflux=disease*areas.H(ii);%*areas.U(ii)/totalArea;%disease, d units [fraction of healthy falling ill]/time
-    
-    %J1Dflux=mJ*areas.J1(ii);%flux of area from J to D, base mortality and disease
+    HUflux=disease*areas.H(ii); %disease, units [fraction of healthy falling ill]/time
     %%% no juvenile d, wrapped into mortality 
+   
     J2Dflux=mJ*areas.J2(ii);
-    %J1Dflux=mJ*areas.J1(ii)+stormDestroy*stormSeries(ii)*areas.J1(ii);
-
-    J1Sflux=mJ*areas.J1(ii);
+    J1Sflux=mJ*areas.J1(ii); %storms do not affect zero-height coral
     J2Sflux=stormDestroy*stormSeries(ii)*areas.J2(ii);
 
     USflux=stormDestroy*stormSeries(ii)*areas.U(ii);
     HSflux=stormDestroy*stormSeries(ii)*areas.H(ii);
-    %HDflux=min(mH*(areas.H(ii).^2)/totalArea,areas.H(ii)-HUflux);%predation, but can't remove more than total H
-    %%% do we want this to be predation and damage and unspecified? do we
-    %%% break those out into 3?
+   
     HDflux=min(mH*areas.H(ii),areas.H(ii)-HUflux); %predation is just
     % part of a total mortality, can be expanded in future work. 
 
-
-    
-    % JAY CHANGED THIS ON JUNE 30, 2025 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     SHflux=min(restrHuman,areas.S(ii));%human restoration
     if SHflux<restrHuman
         DHflux=min(restrHuman-SHflux,areas.D(ii));%human restoration
@@ -164,7 +143,6 @@ for ii=1:timesteps
 
 
     UDflux=mU*areas.U(ii);%linear form now
-    % NEW, Jay thinks is correct
     gaD=abs((((heights.hD(ii)*phiH/2)-rD*cos(atan(2/phiH)))^2/(heights.hD(ii)*phiH/2)^2) -1)*dt;
     DSflux=gaD*areas.D(ii)+stormDestroy*stormSeries(ii)*areas.D(ii);%dissolution/physical damage
 
@@ -172,16 +150,11 @@ for ii=1:timesteps
     Inow=Isurf(ii)*exp(-(waterdepth(ii)-heights.hH(ii))*Kd);
     Inow1=Isurf(ii)*exp(-waterdepth(ii)*Kd);
     Inow2=Isurf(ii)*exp(-(waterdepth(ii)-heights.hJ2(ii))*Kd);
-    %gaH=(pi*(sqrt(areas.H(ii)/pi)+rH*cosd(atand(2/(phiH)))).^2-areas.H(ii))./dt;% growth function
-    gaH=((((heights.hH(ii)*phiH/2)+rH*cos(atan(2/phiH)))^2/(heights.hH(ii)*phiH/2)^2) -1)*dt;
-    
-    %%new juvenile growth rates
-    %gmaxJ1=((sqrt(areas.J1(ii)./(pi*njuv1))+dr).^2).*pi./(areas.J1(ii)./njuv1);%should be 1 for no growth, >1 for growth
-    %gmaxJ2=((sqrt(areas.J2(ii)./(pi*njuv2))+dr).^2).*pi./(areas.J2(ii)./njuv2)
-   
 
-    if Tsurf(ii)>Tcritical
-        gHmaxNow=max(0,ghH*(1-(Tsurf(ii)-Tcritical)/gslopeDegrees)); %gslopeDegrees is thermal stress parameter
+    gaH=((((heights.hH(ii)*phiH/2)+rH*cos(atan(2/phiH)))^2/(heights.hH(ii)*phiH/2)^2) -1)*dt; 
+
+    if Tsurf(ii)>Tcritical %bleaching possible
+        gHmaxNow=max(0,ghH*(1-(Tsurf(ii)-Tcritical)/gslopeDegrees)); %gslopeDegrees is thermal stress parameter, Tmax-Tcritical
         gAmaxNow=max(0,gaH*(1-(Tsurf(ii)-Tcritical)/gslopeDegrees));
         %%% no temperature stratification currently
         if gHmaxNow==0 || gAmaxNow==0
@@ -212,8 +185,7 @@ for ii=1:timesteps
         % growth for J
         gNowJ1=max(0,gmaxJ1*(1-(Tsurf(ii)-Tcritical)/gslopeDegrees));%no growth when bleaching temps
         gNowJ2=max(0,gmaxJ2*(1-(Tsurf(ii)-Tcritical)/gslopeDegrees));
-        %%% maybe gslopeDegrees or Tcrit is different for juveniles?
-        %%% species dependent, so keep it the same
+
         if gNowJ1==0
           %  Ieff1=0; Ieff2=0;
             gNowJ1=0; gNowJ2=0;
@@ -238,25 +210,22 @@ for ii=1:timesteps
     SJ1flux=min(gNowJ1.*areas.J1(ii),areas.S(ii)-SHflux);%growth of juveniles on S 
     DJ2flux=min(gNowJ2.*areas.J2(ii),areas.D(ii)-DHflux);%growth of juveniles on D
     
-    if mod(ii-spawnweek,52)==0 %Atlantic mostly %spawnweek may be a good target for our sensitivity study!
+    if mod(ii-spawnweek,52)==0 
         if areas.H(ii)>1e-10 %floating point limits
         DJ2flux=min(areas.D(ii)-DHflux,DJ2flux+reproduction*areas.H(ii)*areas.D(ii)/(areas.D(ii)+areas.S(ii)));
         SJ1flux=min(areas.S(ii)-SHflux,SJ1flux+reproduction*areas.H(ii)*areas.S(ii)/(areas.D(ii)+areas.S(ii)));
         end
         J1Hflux=areas.J1(ii)./maturityYears;%J to H
         J2Hflux=areas.J2(ii)./maturityYears;
-        %areas.J1(ii)./njuv1;
-        %update number of juveniles
-        njuv1=njuv1*(1-1/maturityYears)+reproduction*areas.H(ii)*(areas.S(ii)./(areas.S(ii)+areas.D(ii)))./0.000001;%assume 1mm2 size of newly settled juvenile
+       
+        %update number of juveniles %assume 1mm2 size of newly settled juvenile
+        njuv1=njuv1*(1-1/maturityYears)+reproduction*areas.H(ii)*(areas.S(ii)./(areas.S(ii)+areas.D(ii)))./0.000001;
         njuv2=njuv2*(1-1/maturityYears)+reproduction*areas.H(ii)*(areas.D(ii)./(areas.S(ii)+areas.D(ii)))./0.000001;
     else
         J1Hflux=0; J2Hflux=0;
     end
    
     %area changes, using the fluxes above
-    %I've put in dt here, and removed from some places above. Everything is
-    %set up for dt=1week, so we should sometime check dt=2week or dt=1day
-    %gives okay results.
     areas.J1(ii+1)=areas.J1(ii)+(SJ1flux-J1Sflux-J1Hflux)*dt;
     areas.J2(ii+1)=areas.J2(ii)+(DJ2flux-J2Dflux-J2Hflux-J2Sflux)*dt;
     areas.H(ii+1)=areas.H(ii)+(J1Hflux+J2Hflux+UHflux+SHflux+DHflux...
@@ -309,7 +278,7 @@ for ii=1:timesteps
         heights.hJ2(ii+1)=0;%0 height for 0 area
         areas.J2(ii+1)=0;%no negative areas
     end
-    if areas.H(ii+1)>0 %UPDATED 3/5/25 !!! moved DHflux to have hH not hD
+    if areas.H(ii+1)>0 
         heights.hH(ii+1)=((heights.hH(ii)+ghHnow*dt)*areas.H(ii)...
             +heights.hH(ii)*(-HUflux-HDflux+SHflux+DHflux)*dt+heights.hJ2(ii)*J2Hflux*dt+...
             heights.hU(ii)*UHflux*dt)/areas.H(ii+1);
@@ -350,6 +319,7 @@ for ii=1:timesteps
         areas.D(ii+1)=0;
     end
  end
+
 
 
 
