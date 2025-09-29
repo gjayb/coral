@@ -1,6 +1,7 @@
 function [params, times] = setparams(reefChoice, years)
-%UNTITLED Summary of this function goes here
-%   Detailed explanation goes here
+%setparams Sets the parameters for input to coral11
+%   These values are fitted to data from Cocos island reefs (Presidio, Pacheco, Chatham) 
+%    and Rangiroa Atoll. All of these reefs are in the Pacific.
 switch reefChoice
     case 1 %Presidio
         params.fU0 = 0; 
@@ -8,14 +9,14 @@ switch reefChoice
         params.fD0 = 96.4; 
         params.fS0 = 0; 
         params.fJ20 = 1.8; 
-        params.fJ10 = 0;% Presidio  %% 
+        params.fJ10 = 0;
         params.hJ20 = 1.5;%0.1; %1.5
         params.hJ10 = 0;
         params.hH0 = 1.5; 
         params.hU0 = 1.5; 
-        params.hD0 = 1.5;%1.5m average reef "thickness"
+        params.hD0 = 1.5; %1.5m average reef "thickness"
         
-        params.reproduction = 0.017;%Presidio 0.017 %avg 0.008
+        params.reproduction = 0.017; %Presidio 0.017 %avg 0.008
         params.recovery = 0.00048;
         params.phi = 3.93; %presidio 3.93 %shape factor phi = width/height %0.1-5
         params.rH = 0.000182885; %0.000183; %presidio %linear extension rate in m/yr - 0.000183
@@ -53,7 +54,7 @@ switch reefChoice
         params.mH = 0.00361; %0.003613;
         %params.dr = 0.00000659;%m/wk radius growth
         params.mU = 0.011;
-        params.mJ = 0.0185; %0.005;%0.018;%0.0191;   % 0 - 0.0192 (0-100%) 80% mortality -> 0.0188, 
+        params.mJ = 0.0185; %0.005;%0.018;%0.0191;   % 0 - 0.0192 (0-100%) 80% mortality -> 0.0188 
        
         params.Imean = 43; 
         params.Iamp = 9; 
